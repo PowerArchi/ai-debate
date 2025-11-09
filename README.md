@@ -177,3 +177,6 @@ ai-debate/
 ## License
 
 MIT License — see `LICENSE` for details.
+- This project is now available on GitHub: https://github.com/PowerArchi/ai-debate
+- It is shared openly for learning and exploration.
+- Due to time constraints, I’m unable to offer support or respond to enquiries, but you’re welcome to use or adapt the code freely.
