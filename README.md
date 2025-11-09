@@ -154,18 +154,14 @@ ai-debate/
 
 ## Configuration reference
 
-+-----------------------+-------------------------+-------------------------------------------------------------+
-| Variable              | Default                 | Description                                                 |
-+-----------------------+-------------------------+-------------------------------------------------------------+
-| OPENAI_API_KEY        | —                       | OpenAI API key                                              |
-| ANTHROPIC_API_KEY     | —                       | Anthropic API key                                           |
-| GOOGLE_API_KEY        | —                       | Gemini API key                                              |
-| AGENTS                | OpenAI,Claude,Gemini    | Comma-separated list of debating agents                     |
-| MCP_SERVERS           | ["local-stub"]          | JSON array of MCP servers                                   |
-| TOOL_BUDGET_PER_ROUND | 3                       | Maximum number of MCP tool calls per agent per round        |
-| PARALLEL_ANALYSES     | true                    | Runs agents' initial analyses in parallel                   |
-| BARRIERED_ROUNDS      | true                    | All agents to finish each round before the next begins      |
-+-----------------------+-------------------------+-------------------------------------------------------------+
+- **OPENAI_API_KEY** — OpenAI API key
+- **ANTHROPIC_API_KEY** — Anthropic API key
+- **GOOGLE_API_KEY** — Gemini API key
+- **AGENTS** *(default: `OpenAI,Claude,Gemini`)* — Comma-separated list of debating agents
+- **MCP_SERVERS** *(default: `["local-stub"]`)* — JSON array of MCP servers
+- **TOOL_BUDGET_PER_ROUND** *(default: `3`)* — Maximum number of MCP tool calls per agent per round
+- **PARALLEL_ANALYSES** *(default: `true`)* — Runs agents’ initial analyses in parallel
+- **BARRIERED_ROUNDS** *(default: `true`)* — All agents must finish each round before the next begins
 
 ---
 
