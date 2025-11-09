@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Agent Debate</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+
+<body>
+  <div class="wrap">
+    <div class="header">
+      <div class="header-top">
+        <span class="badge">Agent Debate</span>
+        <div class="topic" id="topic">—</div>
+      </div>
+      <form id="debate-form" class="runbox">
+        <input id="topic-input" type="text" placeholder="Enter a debate topic…" />
+        <input id="rounds-input" type="number" min="1" max="4" value="2" />
+        <button id="run-btn" type="submit">Run</button>
+      </form>
+    </div>
+
+    <div class="progress" id="progress"></div>
+    <div class="grid" id="grid"></div>
+    <div class="timeline" id="timeline"></div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = "ai-debate/session";
+    let DEFAULT_ROUNDS = 3;
+
+    const state = {
+      topic: "—",
+      agents: new Map(),
+      finished: false,
+      totalRounds: DEFAULT_ROUNDS,
+      currentKey: null,
+    };
+    const sessionEvents = [];
+
+    const grid = document.getElementById("grid");
+    const topicEl = document.getElementById("topic");
+    const progressEl = document.getElementById("progress");
+    const timeline = document.getElementById("timeline");
+
+    function colorClass(name, role) {
+      const r = (role || "").toLowerCase();
+      const n = (name || "").toLowerCase();
+      if (r === "planner" || n === "planner") return "Planner";
+      if (r === "judge" || n === "judge") return "Judge";
+      if (name === "OpenAI") return "OpenAI";
+      if (name === "Claude") return "Claude";
+      if (name === "Gemini") return "Gemini";
+      return "";
+    }
+    function escapeHTML(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+    function buildMentionRegex() {
+      const names = [...state.agents.keys()];
+      if (!names.length) return null;
+      names.sort((a, b) => b.length - a.length);
+      const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      try { return new RegExp("\\b(" + names.map(esc).join("|") + ")\\b", "g"); } catch { return null; }
+    }
+    function highlightMentions(text) {
+      if (!text) return "";
+      const escaped = escapeHTML(text);
+      const re = buildMentionRegex();
+      if (!re) return escaped;
+      return escaped.replace(re, (m) => {
+        const info = state.agents.get(m);
+        const cls = "mention " + (info ? colorClass(m, info.role) : "");
+        return `<span class="${cls}">${m}</span>`;
+      });
+    }
+    function preview(s, n = -1) {
+      if (s == null) return "";
+      const out = String(s).replace(/\s+/g, " ").trim();
+      if (n === -1) return out;
+      return out.length > n ? out.slice(0, n - 1) + "…" : out;
+    }
+    function stepPill(key, label) {
+      const el = document.createElement("div");
+      el.className = "step";
+      el.dataset.key = key;
+      el.textContent = label;
+      return el;
+    }
+    function arrowEl() { const el = document.createElement("div"); el.className = "arrow"; return el; }
+    function highlightActive(key) {
+      state.currentKey = key || null;
+      progressEl.querySelectorAll('.step').forEach(el => {
+        el.classList.toggle('active', !!key && el.dataset.key === key);
+      });
+    }
+    function setTopic(t) { topicEl.textContent = t; }
+    function logLine(text, cls = "") {
+      const div = document.createElement("div");
+      div.className = `line ${cls}`;
+      div.textContent = text;
+      timeline.appendChild(div);
+      timeline.scrollTop = timeline.scrollHeight;
+    }
+
+    function buildPipeline(totalRounds) {
+      state.totalRounds = totalRounds;
+      progressEl.innerHTML = "";
+      progressEl.appendChild(stepPill("analyses", "Analyses"));
+      progressEl.appendChild(arrowEl());
+      for (let i = 1; i <= totalRounds; i++) {
+        progressEl.appendChild(stepPill(`round-${i}`, `Round ${i}`));
+        progressEl.appendChild(arrowEl());
+      }
+      progressEl.appendChild(stepPill("conclusion", "Conclusion"));
+      progressEl.appendChild(arrowEl());
+      progressEl.appendChild(stepPill("completed", "Completed"));
+      progressEl.querySelectorAll('.step').forEach(el => el.classList.remove('active'));
+      state.currentKey = null;
+    }
+    function ensureRoundsAtLeast(n) {
+      if (n <= state.totalRounds) return;
+      const before = progressEl.querySelector('[data-key="conclusion"]');
+      for (let i = state.totalRounds + 1; i <= n; i++) {
+        const pill = stepPill(`round-${i}`, `Round ${i}`);
+        const arr = arrowEl();
+        progressEl.insertBefore(pill, before);
+        progressEl.insertBefore(arr, before);
+      }
+      state.totalRounds = n;
+    }
+
+    function placeCard(card, role) {
+      const r = (role || "").toLowerCase();
+      if (r === "planner") { grid.insertBefore(card, grid.firstChild); return; }
+      if (r === "judge") { grid.appendChild(card); return; }
+      const judge = [...grid.children].find(el => (el.dataset.role || "").toLowerCase() === "judge");
+      if (judge) grid.insertBefore(card, judge); else grid.appendChild(card);
+    }
+
+    function ensureAgentCard(name, role = "Agent") {
+      if (state.agents.has(name)) return state.agents.get(name);
+      const card = document.createElement("div");
+      card.className = `card ${colorClass(name, role)}`;
+      card.dataset.agent = name;
+      card.dataset.role = role;
+
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      const left = document.createElement("div");
+      left.className = "nameRole";
+      const nm = document.createElement("div"); nm.className = "name"; nm.textContent = name;
+      const rl = document.createElement("div"); rl.className = "role"; rl.textContent = role;
+      left.appendChild(nm); left.appendChild(rl);
+      meta.appendChild(left);
+      card.appendChild(meta);
+
+      const statusbar = document.createElement("div");
+      statusbar.className = "statusbar";
+      const st = document.createElement("div"); st.className = "status"; st.innerHTML = `status: <span class="dots"></span> <span class="slabel">waiting…</span>`;
+      const tool = document.createElement("div"); tool.className = "tool"; tool.textContent = "";
+      statusbar.appendChild(st); statusbar.appendChild(tool);
+
+      const msg = document.createElement("div");
+      msg.className = "msg";
+
+      card.appendChild(statusbar);
+      card.appendChild(msg);
+      grid.appendChild(card);
+      placeCard(card, role);
+
+      const info = {
+        role, statusText: "waiting…", phase: "", round: 0,
+        thinking: true, toolText: "", lastHTML: "",
+        el: card, statusEl: st, toolEl: tool, msgEl: msg, tm: null
+      };
+      state.agents.set(name, info);
+      return info;
+    }
+    function renderAgent(name) {
+      const a = state.agents.get(name);
+      if (!a) return;
+      const label = a.statusText || (a.phase ? `${a.phase}${a.round ? ` · round ${a.round}` : ''}` : "idle");
+      a.statusEl.innerHTML = `status: <span class="dots"></span> <span class="slabel">${label}</span>`;
+      a.el.classList.toggle("thinking", !!a.thinking && !state.finished);
+      a.el.classList.toggle("showTool", !!a.toolText);
+      a.toolEl.textContent = a.toolText || "";
+      a.msgEl.innerHTML = a.lastHTML || "";
+      a.el.classList.remove("flash"); void a.el.offsetWidth; a.el.classList.add("flash");
+    }
+
+    function persistEvent(evt) {
+      try { sessionEvents.push(evt); localStorage.setItem(STORAGE_KEY, JSON.stringify(sessionEvents)); } catch (e) { }
+    }
+    function clearPersistence() { try { sessionEvents.length = 0; localStorage.removeItem(STORAGE_KEY); } catch (e) { } }
+    function restoreFromStorage() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return;
+        const arr = JSON.parse(raw);
+        if (!Array.isArray(arr)) return;
+        for (const evt of arr) window.AgentViz.push(evt);
+      } catch (e) { }
+    }
+
+    window.AgentViz = window.AgentViz || { push: ingest };
+    function ingest(evt) {
+      if (!evt || !evt.type) return;
+
+      if (evt.type === "run.start") {
+        state.finished = false;
+        state.topic = evt.topic || state.topic;
+        setTopic(state.topic);
+        const rounds = Number(evt.total_rounds || evt.rounds || DEFAULT_ROUNDS) || DEFAULT_ROUNDS;
+        buildPipeline(rounds);
+        highlightActive("analyses");
+        grid.innerHTML = ""; state.agents.clear();
+        (evt.agents || []).forEach(a => {
+          const info = ensureAgentCard(a.name, a.role || "Agent");
+          info.statusText = "ready";
+          info.thinking = true;
+          renderAgent(a.name);
+        });
+        logLine(`▶ Run started: ${state.topic}`);
+        persistEvent(evt);
+        return;
+      }
+
+      if (evt.type === "round.start") {
+        const r = evt.round ?? 0;
+        if (r > 0) { ensureRoundsAtLeast(r); highlightActive(`round-${r}`); }
+        else { highlightActive("analyses"); }
+        logLine(`— Round ${r} —`, "round");
+        state.agents.forEach((a, name) => {
+          if (a.tm) { clearTimeout(a.tm); a.tm = null; }
+          a.phase = r === 0 ? "analysis" : `round ${r}`;
+          a.statusText = r === 0 ? "analysis" : `round ${r}`;
+          a.round = r; a.thinking = true; a.toolText = ""; renderAgent(name);
+        });
+        persistEvent(evt);
+        return;
+      }
+
+      if (evt.type === "message") {
+        const name = evt.agent;
+        const role = evt.role || (state.agents.get(name)?.role) || "Agent";
+        const info = ensureAgentCard(name, role);
+        info.role = role;
+        if (info.tm) { clearTimeout(info.tm); info.tm = null; }
+        const phase = evt.phase || "msg";
+        info.phase = phase;
+        info.round = evt.round || 0;
+        info.statusText = phase === "analysis" ? "analysis" : `${phase} · round ${info.round}`;
+        info.lastHTML = highlightMentions(preview(evt.content, -1));
+        info.thinking = false;
+        renderAgent(name);
+        info.tm = setTimeout(() => {
+          info.tm = null;
+          if (state.finished) return;
+          info.thinking = true;
+          renderAgent(name);
+        }, 700);
+        const to = Array.isArray(evt.to) && evt.to.length ? ` → ${evt.to.join(", ")}` : "";
+        const tag = phase === "analysis" ? "analysis" : `${phase} · round ${evt.round ?? "?"}`;
+
+        logLine(`[${name}] (${tag})${to}: ${preview(evt.content, -1)}`);
+
+        persistEvent(evt);
+        return;
+      }
+
+      if (evt.type === "tool") {
+        const name = evt.agent;
+        const role = state.agents.get(name)?.role || "Agent";
+        const info = ensureAgentCard(name, role);
+        info.toolText = `${evt.details?.tool || "tool"}(...)`;
+        renderAgent(name);
+        setTimeout(() => { info.toolText = ""; renderAgent(name); }, 1200);
+        logLine(`🛠  ${name}: ${evt.details?.tool || "tool"}(${JSON.stringify(evt.details?.args || {})})`);
+        persistEvent(evt);
+        return;
+      }
+
+      if (evt.type === "conclusion") {
+        const name = evt.agent || "Judge";
+        const info = ensureAgentCard(name, "Judge");
+        if (info.tm) { clearTimeout(info.tm); info.tm = null; }
+        info.statusText = "conclusion";
+        info.thinking = false;
+        info.toolText = "";
+        info.lastHTML = highlightMentions(preview(evt.content, -1));
+        highlightActive("conclusion");
+        renderAgent(name);
+        state.agents.forEach((a, n) => {
+          if (a.tm) { clearTimeout(a.tm); a.tm = null; }
+          a.thinking = false;
+          renderAgent(n);
+        });
+
+        logLine(`★ Conclusion by ${name}: ${preview(evt.content, -1)}`, "concl");
+
+        persistEvent(evt);
+        return;
+      }
+
+      if (evt.type === "run.end") {
+        state.finished = true;
+        highlightActive("completed");
+        state.agents.forEach((a, name) => {
+          if (a.tm) { clearTimeout(a.tm); a.tm = null; }
+          a.statusText = "completed";
+          a.thinking = false;
+          a.toolText = "";
+          renderAgent(name);
+        });
+        logLine("■ Run completed");
+        persistEvent(evt);
+        return;
+      }
+
+      if (evt.type === "error") {
+        logLine(`✖ Error: ${evt.message || "unknown"}`);
+        persistEvent(evt);
+        return;
+      }
+    }
+
+    (function init() {
+      buildPipeline(DEFAULT_ROUNDS);
+      restoreFromStorage();
+    })();
+  </script>
+
+  <script>
+    (function () {
+      const form = document.getElementById("debate-form");
+      const topicInput = document.getElementById("topic-input");
+      const roundsInput = document.getElementById("rounds-input");
+      const runBtn = document.getElementById("run-btn");
+
+      let es = null;
+      function closeStream() {
+        if (es) { try { es.close(); } catch (_) { } es = null; }
+        runBtn.disabled = false; runBtn.textContent = "Run";
+      }
+
+      async function runOnce(topic, rounds) {
+        try {
+          const res = await fetch("/api/debate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ topic, rounds })
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || res.statusText);
+          const events = data.events || [];
+          for (const evt of events) { window.AgentViz.push(evt); await new Promise(r => setTimeout(r, 10)); }
+        } catch (err) {
+          alert("Run failed: " + err.message);
+        } finally {
+          closeStream();
+        }
+      }
+
+      function runStream(topic, rounds) {
+        const url = `/api/debate/stream?topic=${encodeURIComponent(topic)}&rounds=${rounds}`;
+        es = new EventSource(url);
+        es.onmessage = (e) => {
+          try {
+            const evt = JSON.parse(e.data);
+            window.AgentViz.push(evt);
+            if (evt.type === "run.end") closeStream();
+          } catch (_) { }
+        };
+        es.addEventListener("done", () => closeStream());
+        es.onerror = () => {
+          if (es) { try { es.close(); } catch (_) { } es = null; }
+          runOnce(topic, rounds);
+        };
+      }
+
+      form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const topic = (topicInput?.value || "").trim();
+        let rounds = parseInt(roundsInput?.value || String(DEFAULT_ROUNDS), 10);
+        if (!rounds || rounds < 1) rounds = DEFAULT_ROUNDS;
+        if (!topic) { alert("Please enter a topic."); return; }
+
+        DEFAULT_ROUNDS = rounds;
+        clearPersistence();
+        buildPipeline(DEFAULT_ROUNDS);
+        grid.innerHTML = ""; state.agents.clear(); timeline.innerHTML = "";
+        state.finished = false; setTopic(topic);
+
+        runBtn.disabled = true; runBtn.textContent = "Running…";
+        runStream(topic, rounds);
+      });
+    })();
+  </script>
+</body>
+
+</html>

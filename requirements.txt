@@ -1,0 +1,25 @@
+# Core web framework
+Flask==3.0.3
+gunicorn==21.2.0
+
+# Async + retry utilities
+anyio==4.4.0
+tenacity==8.5.0
+
+# LLM vendor SDKs
+openai==1.42.0
+anthropic==0.37.1
+google-generativeai==0.8.3
+
+# LangGraph (for orchestrator graph)
+langgraph==0.1.17
+
+# Environment configuration
+python-dotenv==1.0.1
+
+# Misc deps required by vendors
+pydantic==2.9.2
+typing-extensions==4.12.2
+tqdm==4.66.5
+httpx==0.27.2
+httpcore==1.0.5
