@@ -12,8 +12,8 @@ A small, readable project that demonstrates:
 ![App Screenshot](https://github.com/PowerArchi/ai-debate/blob/main/screenshots/AI_Debate_topic_multiagent_dominant_architecture.png?raw=true)
 
 ## Sample debate topics and results
-[Will multi‐agent collaboration become the dominant architecture for enterprise AI systems within five years?](https://github.com/PowerArchi/ai-debate/wiki/Will-multi%E2%80%90agent-collaboration-become-the-dominant-architecture-for-enterprise-AI-systems-within-five-years%3F)
-[As coding becomes easier with tools like Vibe and AI‐assisted development, companies may shift from relying entirely on SaaS to building their own solutions on PaaS for greater flexibility, control, and customisation at the application layer.](https://github.com/PowerArchi/ai-debate/wiki/As-coding-becomes-easier-with-tools-like-Vibe-and-AI%E2%80%90assisted-development,-companies-may-shift-from-relying-entirely-on-SaaS-to-building-their-own-solutions-on-PaaS-for-greater-flexibility,-control,-and-customisation-at-the-application-layer.)
+- [Will multi‐agent collaboration become the dominant architecture for enterprise AI systems within five years?](https://github.com/PowerArchi/ai-debate/wiki/Will-multi%E2%80%90agent-collaboration-become-the-dominant-architecture-for-enterprise-AI-systems-within-five-years%3F)
+- [As coding becomes easier with tools like Vibe and AI‐assisted development, companies may shift from relying entirely on SaaS to building their own solutions on PaaS for greater flexibility, control, and customisation at the application layer.](https://github.com/PowerArchi/ai-debate/wiki/As-coding-becomes-easier-with-tools-like-Vibe-and-AI%E2%80%90assisted-development,-companies-may-shift-from-relying-entirely-on-SaaS-to-building-their-own-solutions-on-PaaS-for-greater-flexibility,-control,-and-customisation-at-the-application-layer.)
 
 ---
 
