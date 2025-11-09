@@ -8,6 +8,9 @@ A small, readable project that demonstrates:
 
 ---
 
+![App Screenshot](https://github.com/PowerArchi/ai-debate/blob/main/screenshots/AI_Debate_topic_multiagent_dominant_architecture.png?raw=true)
+
+
 ## Table of contents
 
 - [Overview](#overview)
